@@ -1,27 +1,86 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
 
 <head>
+  <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Fancy Form</title>
-
-  <!-- You may add more stuff here -->
+  <title>Currency Swap</title>
   <link href="style.css" rel="stylesheet" />
 </head>
 
 <body>
+  <div class="container">
+    <form id="swap-form" class="swap-form">
+      <h2 class="form-title">Swap</h2>
 
-  <!-- You may reorganise the whole HTML, as long as your form achieves the same effect. -->
-  <form onsubmit="return !1">
-    <h5>Swap</h5>
-    <label for="input-amount">Amount to send</label>
-    <input id="input-amount" />
+      <div class="input-group">
+        <label for="input-amount">Amount to send</label>
+        <div class="input-wrapper">
+          <input
+            type="number"
+            id="input-amount"
+            placeholder="0.00"
+            step="0.000001"
+            min="0"
+          />
+          <select id="input-currency" class="currency-select">
+            <option value="">Select token</option>
+          </select>
+        </div>
+        <div class="balance-info">
+          <span id="input-balance" class="balance"></span>
+        </div>
+        <div class="error-message" id="input-error"></div>
+      </div>
 
-    <label for="output-amount">Amount to receive</label>
-    <input id="output-amount" />
+      <button type="button" class="swap-icon-btn" id="swap-direction">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+          <path d="M14 7L10 3L6 7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+          <path d="M6 13L10 17L14 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+      </button>
 
-    <button>CONFIRM SWAP</button>
-  </form>
-  <script src="script.js"></script>
+      <div class="input-group">
+        <label for="output-amount">Amount to receive</label>
+        <div class="input-wrapper">
+          <input
+            type="number"
+            id="output-amount"
+            placeholder="0.00"
+            step="0.000001"
+            min="0"
+          />
+          <select id="output-currency" class="currency-select">
+            <option value="">Select token</option>
+          </select>
+        </div>
+        <div class="balance-info">
+          <span id="output-balance" class="balance"></span>
+        </div>
+        <div class="error-message" id="output-error"></div>
+      </div>
+
+      <div class="exchange-info" id="exchange-info"></div>
+
+      <button type="submit" class="submit-btn" id="submit-btn">
+        <span class="btn-text">CONFIRM SWAP</span>
+        <span class="btn-loader" style="display: none;">
+          <svg class="spinner" width="20" height="20" viewBox="0 0 20 20">
+            <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2" fill="none" stroke-dasharray="50" stroke-linecap="round">
+              <animateTransform attributeName="transform" type="rotate" from="0 10 10" to="360 10 10" dur="1s" repeatCount="indefinite"/>
+            </circle>
+          </svg>
+          Processing...
+        </span>
+      </button>
+
+      <div class="success-message" id="success-message" style="display: none;">
+        Swap successful!
+      </div>
+    </form>
+  </div>
+
+  <script type="module" src="script.js"></script>
 </body>
 
 </html>
