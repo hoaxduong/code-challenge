@@ -56,11 +56,79 @@ This API follows RESTful best practices:
 - Pagination metadata in responses
 - Links to first, next, previous, last pages
 
-**Consistent Error Format:**
-- Standardized error response structure
-- Error codes for programmatic handling
-- Human-readable messages
-- Timestamps for debugging
+**Consistent Response Format:**
+
+- All responses use `meta`, `data`, and `links` structure
+- `meta` contains HTTP status code and message
+- `data` contains the actual response payload
+- `error` object for error responses (instead of `data`)
+- `links` for HATEOAS navigation
+- Timestamps and additional metadata in `meta`
+
+### 1.2 Standard Response Format
+
+All API responses follow a consistent structure:
+
+**Success Response:**
+```json
+{
+  "meta": {
+    "code": 200,
+    "message": "OK",
+    "timestamp": "ISO8601 timestamp (optional)",
+    "requestId": "UUID (optional for debugging)"
+  },
+  "data": {
+    // Response payload
+  },
+  "links": {
+    // HATEOAS links
+  }
+}
+```
+
+**Error Response:**
+```json
+{
+  "meta": {
+    "code": 400,
+    "message": "Bad Request"
+  },
+  "error": {
+    "code": "ERROR_CODE_CONSTANT",
+    "message": "Human-readable error message",
+    "details": "Additional context (optional)",
+    "timestamp": "ISO8601 timestamp",
+    "retryAfter": "number (for 429 errors)"
+  }
+}
+```
+
+**List Response (with pagination):**
+```json
+{
+  "meta": {
+    "code": 200,
+    "message": "OK"
+  },
+  "data": [
+    // Array of items
+  ],
+  "pagination": {
+    "limit": "number",
+    "offset": "number",
+    "total": "number",
+    "hasNext": "boolean",
+    "hasPrevious": "boolean"
+  },
+  "links": {
+    "self": "current page URL",
+    "first": "first page URL",
+    "next": "next page URL",
+    "prev": "previous page URL"
+  }
+}
+```
 
 ## 2. RESTful API Endpoints
 
@@ -80,11 +148,17 @@ Accept: application/json
 **Response (200 OK):**
 ```json
 {
-  "id": "string (user_id)",
-  "score": "number",
-  "rank": "number",
-  "totalActions": "number",
-  "lastUpdated": "ISO8601 timestamp",
+  "meta": {
+    "code": 200,
+    "message": "OK"
+  },
+  "data": {
+    "id": "string (user_id)",
+    "score": "number",
+    "rank": "number",
+    "totalActions": "number",
+    "lastUpdated": "ISO8601 timestamp"
+  },
   "links": {
     "self": "/api/v1/users/me/score",
     "leaderboard": "/api/v1/leaderboard"
@@ -100,11 +174,17 @@ Accept: application/json
 **Response (200 OK):**
 ```json
 {
-  "id": "string (user_id)",
-  "username": "string",
-  "score": "number",
-  "rank": "number",
-  "lastUpdated": "ISO8601 timestamp",
+  "meta": {
+    "code": 200,
+    "message": "OK"
+  },
+  "data": {
+    "id": "string (user_id)",
+    "username": "string",
+    "score": "number",
+    "rank": "number",
+    "lastUpdated": "ISO8601 timestamp"
+  },
   "links": {
     "self": "/api/v1/users/{userId}/score",
     "user": "/api/v1/users/{userId}"
@@ -139,11 +219,17 @@ Content-Type: application/json
 **Response (201 Created):**
 ```json
 {
-  "id": "string (action_id UUID)",
-  "token": "string (signed JWT token)",
-  "type": "string",
-  "expiresAt": "ISO8601 timestamp",
-  "expectedScoreIncrement": "number",
+  "meta": {
+    "code": 201,
+    "message": "Created"
+  },
+  "data": {
+    "id": "string (action_id UUID)",
+    "token": "string (signed JWT token)",
+    "type": "string",
+    "expiresAt": "ISO8601 timestamp",
+    "expectedScoreIncrement": "number"
+  },
   "links": {
     "self": "/api/v1/actions/{actionId}",
     "complete": "/api/v1/actions/{actionId}/complete"
@@ -182,18 +268,24 @@ Content-Type: application/json
 **Response (200 OK):**
 ```json
 {
-  "actionId": "string",
-  "userId": "string",
-  "score": {
-    "previous": "number",
-    "current": "number",
-    "increment": "number"
+  "meta": {
+    "code": 200,
+    "message": "OK"
   },
-  "rank": {
-    "previous": "number",
-    "current": "number"
+  "data": {
+    "actionId": "string",
+    "userId": "string",
+    "score": {
+      "previous": "number",
+      "current": "number",
+      "increment": "number"
+    },
+    "rank": {
+      "previous": "number",
+      "current": "number"
+    },
+    "completedAt": "ISO8601 timestamp"
   },
-  "completedAt": "ISO8601 timestamp",
   "links": {
     "self": "/api/v1/actions/{actionId}",
     "userScore": "/api/v1/users/me/score",
@@ -205,6 +297,10 @@ Content-Type: application/json
 **Response (400 Bad Request):**
 ```json
 {
+  "meta": {
+    "code": 400,
+    "message": "Bad Request"
+  },
   "error": {
     "code": "INVALID_ACTION",
     "message": "Action type not recognized",
@@ -217,6 +313,10 @@ Content-Type: application/json
 **Response (401 Unauthorized):**
 ```json
 {
+  "meta": {
+    "code": 401,
+    "message": "Unauthorized"
+  },
   "error": {
     "code": "INVALID_TOKEN",
     "message": "Action token is invalid or expired",
@@ -228,6 +328,10 @@ Content-Type: application/json
 **Response (403 Forbidden):**
 ```json
 {
+  "meta": {
+    "code": 403,
+    "message": "Forbidden"
+  },
   "error": {
     "code": "TOKEN_ALREADY_USED",
     "message": "This action has already been completed",
@@ -239,9 +343,14 @@ Content-Type: application/json
 **Response (429 Too Many Requests):**
 ```json
 {
+  "meta": {
+    "code": 429,
+    "message": "Too Many Requests"
+  },
   "error": {
     "code": "RATE_LIMIT_EXCEEDED",
     "message": "Too many actions. Please try again later.",
+    "details": "Maximum 10 actions per minute allowed",
     "retryAfter": "number (seconds)",
     "timestamp": "ISO8601 timestamp"
   }
@@ -264,14 +373,20 @@ Retry-After: 60
 **Response (200 OK):**
 ```json
 {
-  "id": "string",
-  "userId": "string",
-  "type": "string",
-  "status": "pending|completed|expired",
-  "createdAt": "ISO8601 timestamp",
-  "expiresAt": "ISO8601 timestamp",
-  "completedAt": "ISO8601 timestamp (if completed)",
-  "scoreIncrement": "number (if completed)",
+  "meta": {
+    "code": 200,
+    "message": "OK"
+  },
+  "data": {
+    "id": "string",
+    "userId": "string",
+    "type": "string",
+    "status": "pending|completed|expired",
+    "createdAt": "ISO8601 timestamp",
+    "expiresAt": "ISO8601 timestamp",
+    "completedAt": "ISO8601 timestamp (if completed)",
+    "scoreIncrement": "number (if completed)"
+  },
   "links": {
     "self": "/api/v1/actions/{actionId}",
     "user": "/api/v1/users/{userId}"
@@ -300,6 +415,12 @@ If-None-Match: "etag-value" (optional, for caching)
 **Response (200 OK):**
 ```json
 {
+  "meta": {
+    "code": 200,
+    "message": "OK",
+    "lastRefresh": "ISO8601 timestamp",
+    "cacheAge": "number (seconds)"
+  },
   "data": [
     {
       "rank": "number",
@@ -325,10 +446,6 @@ If-None-Match: "etag-value" (optional, for caching)
     "first": "/api/v1/leaderboard?limit=10&offset=0",
     "next": "/api/v1/leaderboard?limit=10&offset=10",
     "prev": null
-  },
-  "meta": {
-    "lastRefresh": "ISO8601 timestamp",
-    "cacheAge": "number (seconds)"
   }
 }
 ```
@@ -351,29 +468,35 @@ Last-Modified: Wed, 21 Oct 2025 07:28:00 GMT
 **Response (200 OK):**
 ```json
 {
-  "user": {
-    "rank": "number",
-    "userId": "string",
-    "username": "string",
-    "score": "number"
+  "meta": {
+    "code": 200,
+    "message": "OK"
   },
-  "context": {
-    "above": [
-      {
-        "rank": "number",
-        "userId": "string",
-        "username": "string",
-        "score": "number"
-      }
-    ],
-    "below": [
-      {
-        "rank": "number",
-        "userId": "string",
-        "username": "string",
-        "score": "number"
-      }
-    ]
+  "data": {
+    "user": {
+      "rank": "number",
+      "userId": "string",
+      "username": "string",
+      "score": "number"
+    },
+    "context": {
+      "above": [
+        {
+          "rank": "number",
+          "userId": "string",
+          "username": "string",
+          "score": "number"
+        }
+      ],
+      "below": [
+        {
+          "rank": "number",
+          "userId": "string",
+          "username": "string",
+          "score": "number"
+        }
+      ]
+    }
   },
   "links": {
     "self": "/api/v1/leaderboard/users/{userId}",
@@ -383,32 +506,111 @@ Last-Modified: Wed, 21 Oct 2025 07:28:00 GMT
 }
 ```
 
-### 2.3 WebSocket Real-time Updates
+### 2.4 WebSocket Real-time Updates
 
-**Endpoint:** `ws://api.domain.com/ws/leaderboard`
+**Endpoint:** `wss://api.domain.com/api/v1/ws/leaderboard`
 
-**Purpose:** Push real-time leaderboard updates to connected clients.
+**Purpose:** Push real-time leaderboard updates to connected clients via WebSocket.
 
-**Connection Handshake:**
+**Connection:**
+```
+wss://api.domain.com/api/v1/ws/leaderboard
+```
+
+**Client Subscribe Message:**
 ```json
 {
   "type": "subscribe",
-  "channel": "leaderboard.top10",
+  "channel": "leaderboard",
   "auth": "Bearer <JWT_TOKEN>"
 }
 ```
 
-**Server Push Message:**
+**Server Response - Success (Initial State):**
 ```json
 {
-  "type": "leaderboard.update",
-  "timestamp": "ISO8601 timestamp",
-  "data": {
-    "leaderboard": [...],
-    "changeType": "score_update|new_entry|rank_change"
+  "meta": {
+    "code": 200,
+    "message": "OK"
+  },
+  "type": "leaderboard.initial",
+  "data": [
+    {
+      "rank": 1,
+      "userId": "string",
+      "username": "string",
+      "score": "number",
+      "lastUpdated": "ISO8601 timestamp"
+    }
+  ]
+}
+```
+
+**Server Response - Error:**
+```json
+{
+  "meta": {
+    "code": 401,
+    "message": "Unauthorized"
+  },
+  "type": "error",
+  "error": {
+    "code": "INVALID_TOKEN",
+    "message": "Invalid or expired authentication token",
+    "timestamp": "ISO8601 timestamp"
   }
 }
 ```
+
+*Note: Connection will be closed with code 1008 (Policy Violation) after error message.*
+
+**Server Push Message (Real-time Updates):**
+```json
+{
+  "meta": {
+    "code": 200,
+    "message": "OK",
+    "timestamp": "ISO8601 timestamp"
+  },
+  "type": "leaderboard.update",
+  "data": [
+    {
+      "rank": 1,
+      "userId": "string",
+      "username": "string",
+      "score": "number",
+      "lastUpdated": "ISO8601 timestamp"
+    }
+  ],
+  "changeInfo": {
+    "type": "score_update|new_entry|rank_change",
+    "affectedUsers": ["userId1", "userId2"]
+  }
+}
+```
+
+**Server Heartbeat (Keep-alive):**
+```json
+{
+  "type": "ping",
+  "timestamp": "ISO8601 timestamp"
+}
+```
+
+**Client Heartbeat Response:**
+```json
+{
+  "type": "pong",
+  "timestamp": "ISO8601 timestamp"
+}
+```
+
+**WebSocket Close Codes:**
+
+- `1000` - Normal closure (client disconnects)
+- `1001` - Going away (page navigation)
+- `1008` - Policy violation (invalid auth)
+- `1011` - Internal server error
 
 ## 3. Security Mechanisms
 

@@ -87,8 +87,9 @@ sequenceDiagram
     deactivate API
 
     Note over User,Queue: 4. Real-time Broadcast Phase
-    Queue->>WS: Score Update Event
+    Queue->>WS: Score Update Event<br/>(userId, new score, action)
     activate WS
+
     WS->>Redis: Get Updated Leaderboard
     alt Cache Miss
         WS->>DB: Query Top 10 Users
@@ -98,8 +99,14 @@ sequenceDiagram
         Redis-->>WS: Cached Top 10
     end
 
-    WS->>WS: Prepare Broadcast Message
-    WS->>Client: WebSocket Push<br/>(Updated Leaderboard)
+    WS->>WS: Prepare Broadcast Message<br/>(meta + data + type)
+    WS->>Redis: Get All Connected Clients<br/>(from connection pool)
+    Redis-->>WS: List of Active Connections
+
+    loop For Each Connected Client
+        WS->>Client: WebSocket Push<br/>{meta: {code: 200}, data: [...], type: "leaderboard.update"}
+    end
+
     deactivate WS
     Client->>User: Update UI (Live)
 ```
@@ -141,42 +148,125 @@ sequenceDiagram
     participant WS as WebSocket Server
     participant Auth as Auth Service
     participant Redis
+    participant DB as Database
 
-    Client->>LB: ws://api.domain.com/ws/leaderboard
+    Client->>LB: wss://api.domain.com/api/v1/ws/leaderboard
     LB->>WS: Route Connection (Sticky Session)
     activate WS
 
     WS->>Client: Connection Opened
-    Client->>WS: Subscribe Message<br/>(with JWT Token)
+
+    Client->>WS: Subscribe Message<br/>{type: "subscribe", auth: "Bearer JWT"}
 
     WS->>Auth: Validate JWT Token
     alt Invalid Token
         Auth-->>WS: Invalid
-        WS->>Client: 401 Unauthorized
-        WS->>Client: Close Connection
+        WS->>Client: Error Message<br/>{meta: {code: 401}, error: {...}}
+        WS->>Client: Close Connection (1008)
         deactivate WS
     else Valid Token
-        Auth-->>WS: Valid User
-        WS->>Redis: Add to Connection Pool<br/>(user:connections)
-        WS->>Redis: Get Current Leaderboard
-        Redis-->>WS: Top 10 Data
-        WS->>Client: Initial Leaderboard State
+        Auth-->>WS: Valid User (userId: abc123)
+        WS->>Redis: Add Connection to Pool<br/>(user:abc123:connections)
 
-        Note over Client,Redis: Connection Active
-
-        loop Real-time Updates
-            WS->>WS: Receive Score Update Event
-            WS->>Client: Push Updated Leaderboard
+        WS->>Redis: Get Cached Leaderboard
+        alt Cache Hit
+            Redis-->>WS: Cached Top 10
+        else Cache Miss
+            WS->>DB: Query Top 10 Users
+            DB-->>WS: Top 10 Data
+            WS->>Redis: Cache Result (TTL: 60s)
         end
 
-        Note over Client,Redis: On Disconnect
+        WS->>Client: Initial State Message<br/>{meta: {code: 200}, data: [...], type: "leaderboard.initial"}
+
+        Note over Client,DB: Connection Active - Client subscribed
+
+        Note over Client,DB: On Disconnect
         Client->>WS: Close Connection
-        WS->>Redis: Remove from Connection Pool
+        WS->>Redis: Remove from Connection Pool<br/>(user:abc123:connections)
         deactivate WS
     end
 ```
 
-## 4. Anti-Cheat Detection Flow
+## 4. Complete WebSocket Real-time Flow
+
+```mermaid
+sequenceDiagram
+    participant User1 as User 1
+    participant Client1 as Client 1 (Browser)
+    participant User2 as User 2
+    participant Client2 as Client 2 (Browser)
+    participant WS as WebSocket Server
+    participant Queue as Message Queue
+    participant Redis
+    participant DB as Database
+
+    Note over User1,DB: Phase 1: Clients Connect & Subscribe
+
+    Client1->>WS: wss://api.domain.com/api/v1/ws/leaderboard
+    activate WS
+    WS->>Client1: Connection Opened
+    Client1->>WS: {type: "subscribe", auth: "Bearer JWT1"}
+    WS->>WS: Validate JWT1
+    WS->>Redis: Add Client1 to connection pool
+    WS->>Redis: Get leaderboard cache
+    Redis-->>WS: Top 10 data
+    WS->>Client1: {meta: {code: 200}, type: "leaderboard.initial", data: [...]}
+    Client1->>User1: Show leaderboard
+
+    Client2->>WS: wss://api.domain.com/api/v1/ws/leaderboard
+    WS->>Client2: Connection Opened
+    Client2->>WS: {type: "subscribe", auth: "Bearer JWT2"}
+    WS->>WS: Validate JWT2
+    WS->>Redis: Add Client2 to connection pool
+    WS->>Redis: Get leaderboard cache
+    Redis-->>WS: Top 10 data
+    WS->>Client2: {meta: {code: 200}, type: "leaderboard.initial", data: [...]}
+    Client2->>User2: Show leaderboard
+
+    Note over User1,DB: Phase 2: Score Update Triggers Broadcast
+
+    User1->>Client1: Complete Action
+    Client1->>Client1: Score update happens<br/>(via REST API - see diagram 1)
+
+    Queue->>WS: Score Update Event<br/>{userId: "user1", newScore: 500}
+
+    WS->>Redis: Invalidate leaderboard cache
+    WS->>DB: Query new Top 10
+    DB-->>WS: Updated leaderboard
+    WS->>Redis: Cache new leaderboard
+
+    WS->>Redis: Get all connected clients
+    Redis-->>WS: [Client1, Client2, ...]
+
+    WS->>WS: Prepare broadcast message<br/>{meta, type, data, changeInfo}
+
+    par Broadcast to All Clients
+        WS->>Client1: {meta: {code: 200}, type: "leaderboard.update", data: [...]}
+        WS->>Client2: {meta: {code: 200}, type: "leaderboard.update", data: [...]}
+    end
+
+    Client1->>User1: Update UI (Live)
+    Client2->>User2: Update UI (Live)
+
+    Note over User1,DB: Phase 3: Heartbeat & Connection Maintenance
+
+    loop Every 30 seconds
+        WS->>Client1: {type: "ping", timestamp: "..."}
+        WS->>Client2: {type: "ping", timestamp: "..."}
+        Client1->>WS: {type: "pong", timestamp: "..."}
+        Client2->>WS: {type: "pong", timestamp: "..."}
+    end
+
+    Note over User1,DB: Phase 4: Client Disconnect
+
+    User2->>Client2: Navigate away
+    Client2->>WS: Close connection (1001)
+    WS->>Redis: Remove Client2 from pool
+    deactivate WS
+```
+
+## 5. Anti-Cheat Detection Flow
 
 ```mermaid
 flowchart TD
