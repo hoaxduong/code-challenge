@@ -163,7 +163,6 @@ sequenceDiagram
         Auth-->>WS: Invalid
         WS->>Client: Error Message<br/>{meta: {code: 401}, error: {...}}
         WS->>Client: Close Connection (1008)
-        deactivate WS
     else Valid Token
         Auth-->>WS: Valid User (userId: abc123)
         WS->>Redis: Add Connection to Pool<br/>(user:abc123:connections)
